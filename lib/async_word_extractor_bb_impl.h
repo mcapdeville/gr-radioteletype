@@ -33,11 +33,12 @@ namespace gr {
         float bits_per_sample;
         float position;
         bool waiting_for_start;
+        bool verify_start;
         unsigned char current_word;
         unsigned char bits_eaten;
         void reset();
-        unsigned char *eat_sample(bool sample, unsigned char *out);
-        unsigned char *eat_bit(bool bit, unsigned char *out);
+        unsigned char *eat_sample(signed char sample, unsigned char *out);
+        unsigned char *eat_bit(signed char bit, unsigned char *out);
 
       public:
         async_word_extractor_bb_impl(int bits_per_word, float sample_rate, float bit_rate);

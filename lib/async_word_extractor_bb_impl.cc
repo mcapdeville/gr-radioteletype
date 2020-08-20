@@ -46,6 +46,7 @@ namespace gr {
     {
       bits_per_sample = bit_rate / sample_rate;
       waiting_for_start = true;
+      verify_start = false;
     }
 
     async_word_extractor_bb_impl::~async_word_extractor_bb_impl()
@@ -54,7 +55,7 @@ namespace gr {
 
     void async_word_extractor_bb_impl::reset()
     {
-      waiting_for_start = false;
+      verify_start = true;
       position = -0.5;
       bits_eaten = 0;
       current_word = 0;
@@ -67,20 +68,23 @@ namespace gr {
       ninput_items_required[0] = required_samples;
     }
 
-    unsigned char *async_word_extractor_bb_impl::eat_bit(bool sample, unsigned char *out)
+    unsigned char *async_word_extractor_bb_impl::eat_bit(signed char sample, unsigned char *out)
     {
-      if (bits_eaten >= bits_per_word and sample)
+      if (bits_eaten == bits_per_word)
       {
-        *out++ = current_word;
-        waiting_for_start = true;
+	if (sample>=1) { // Stop
+        	*out++ = current_word;
+        	waiting_for_start = true;
+	}
+	else bits_eaten++; // Framming error
       }
       else
       {
         // shift the bit in at the most significant position
         current_word >>= 1;
-        if (sample)
+        if (sample>=1)
         {
-          current_word += (1 << (bits_per_word-1));
+          current_word |= (1 << (bits_per_word-1));
         }
 
         bits_eaten += 1;
@@ -89,20 +93,39 @@ namespace gr {
       return out;
     }
 
-    unsigned char *async_word_extractor_bb_impl::eat_sample(bool sample, unsigned char *out)
+    unsigned char *async_word_extractor_bb_impl::eat_sample(signed char sample, unsigned char *out)
     {
       if (waiting_for_start)
       {
-        if (sample == 0) reset();
+	      if (verify_start) { // Re-check start bit at mid bit time
+		      position += bits_per_sample;
+		      if (position>=0) {
+			      if (sample<1) {
+				      verify_start = false;
+				      waiting_for_start = false;
+			      }
+			      else {
+				      verify_start=false;
+				      waiting_for_start=true;
+			      }
+		      }
+	      } else if (sample <1 ) reset(); // Hi to low transition
       }
       else
       {
-        position += bits_per_sample;
-        if (position >= 1)
-        {
-          position -= 1;
-          out = eat_bit(sample, out);
-        }
+	if (bits_eaten > bits_per_word) { // Recovery from framing error
+	       if (sample >=1) {
+		       waiting_for_start = true;
+	       }
+	}
+	else {	
+       		position += bits_per_sample;
+		if (position >= 1)
+		{
+		  position -= 1;
+		  out = eat_bit(sample, out);
+		}
+	}
       }
 
       return out;
